@@ -1,3 +1,9 @@
+# Streamlit secrets (contains API tokens)
+.streamlit/secrets.toml
+
+# Personal tag data
+data/tags.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
