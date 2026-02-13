@@ -131,6 +131,13 @@ if selected_tag:
     if n_tagged < 2:
         st.warning("Need at least 2 tagged days for meaningful comparison.")
     else:
+        # Sample size warning
+        if n_tagged < 10:
+            st.caption(
+                f"Based on only **{n_tagged} tagged days** — results are suggestive, "
+                f"not conclusive. Tag more days for reliable insights."
+            )
+
         # Comparison table
         comparison = []
         for metric in available_metrics:
@@ -141,6 +148,7 @@ if selected_tag:
                 pct = (diff / baseline_mean * 100) if baseline_mean != 0 else 0
                 comparison.append({
                     "Metric": FRIENDLY.get(metric, metric),
+                    "metric_key": metric,
                     f"Tagged ({selected_tag})": round(tagged_mean, 1),
                     "Baseline": round(baseline_mean, 1),
                     "Difference": round(diff, 1),
@@ -149,39 +157,47 @@ if selected_tag:
 
         if comparison:
             comp_df = pd.DataFrame(comparison)
-            st.dataframe(comp_df, use_container_width=True, hide_index=True)
+            display_df = comp_df.drop(columns=["metric_key"])
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-            # Visual comparison
+            # Per-metric % difference chart (fixes the mixed-scale problem)
+            st.markdown("**Impact as % difference from baseline**")
             fig = go.Figure()
-            metric_labels = comp_df["Metric"].tolist()
+            colors = []
+            for _, row in comp_df.iterrows():
+                pct = row["Diff %"]
+                mk = row["metric_key"]
+                # For resting HR, positive diff % is bad
+                if mk == "resting_hr":
+                    colors.append("#EF4444" if pct > 0 else "#10B981")
+                else:
+                    colors.append("#10B981" if pct > 0 else "#EF4444")
+
             fig.add_trace(go.Bar(
-                x=metric_labels,
-                y=comp_df["Baseline"],
-                name="Baseline",
-                marker_color="#6B7280",
-            ))
-            fig.add_trace(go.Bar(
-                x=metric_labels,
-                y=comp_df[f"Tagged ({selected_tag})"],
-                name=f"Tagged ({selected_tag})",
-                marker_color="#7C3AED",
+                x=comp_df["Metric"],
+                y=comp_df["Diff %"],
+                marker_color=colors,
+                text=[f"{v:+.1f}%" for v in comp_df["Diff %"]],
+                textposition="outside",
             ))
             fig.update_layout(
                 template="plotly_dark",
-                height=400,
-                barmode="group",
+                height=350,
                 margin=dict(l=20, r=20, t=10, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                yaxis_title="% difference from baseline",
+                xaxis_title="",
             )
+            fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
             st.plotly_chart(fig, use_container_width=True)
 
-    # Next-day impact
-    st.markdown("**Next-day effect**")
-    st.caption("How do metrics look the day *after* a tagged day?")
+    # ── Next-day impact (promoted with visualization) ───────────────────────
+
+    st.markdown("---")
+    st.subheader("Next-Day Effect")
+    st.markdown(f"How do your metrics look the day **after** a *{selected_tag}* day?")
 
     next_day_comparison = []
     for metric in available_metrics:
-        # Get the day after each tagged day
         next_day_dates = {d + pd.Timedelta(days=1) for d in tagged_dates}
         next_day_data = daily_copy[daily_copy["day"].isin(next_day_dates) & ~daily_copy["tagged"]]
         if len(next_day_data) >= 2:
@@ -189,14 +205,46 @@ if selected_tag:
             bl_mean = baseline_days[metric].mean()
             if pd.notna(nd_mean) and pd.notna(bl_mean):
                 diff = nd_mean - bl_mean
+                pct = (diff / bl_mean * 100) if bl_mean != 0 else 0
                 next_day_comparison.append({
                     "Metric": FRIENDLY.get(metric, metric),
+                    "metric_key": metric,
                     "Day After": round(nd_mean, 1),
                     "Baseline": round(bl_mean, 1),
                     "Difference": round(diff, 1),
+                    "Diff %": round(pct, 1),
                 })
 
     if next_day_comparison:
-        st.dataframe(pd.DataFrame(next_day_comparison), use_container_width=True, hide_index=True)
+        nd_df = pd.DataFrame(next_day_comparison)
+        st.dataframe(nd_df.drop(columns=["metric_key"]), use_container_width=True, hide_index=True)
+
+        # Visualize next-day effect
+        nd_colors = []
+        for _, row in nd_df.iterrows():
+            pct = row["Diff %"]
+            mk = row["metric_key"]
+            if mk == "resting_hr":
+                nd_colors.append("#EF4444" if pct > 0 else "#10B981")
+            else:
+                nd_colors.append("#10B981" if pct > 0 else "#EF4444")
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=nd_df["Metric"],
+            y=nd_df["Diff %"],
+            marker_color=nd_colors,
+            text=[f"{v:+.1f}%" for v in nd_df["Diff %"]],
+            textposition="outside",
+        ))
+        fig.update_layout(
+            template="plotly_dark",
+            height=350,
+            margin=dict(l=20, r=20, t=10, b=20),
+            yaxis_title="% difference from baseline",
+            xaxis_title="",
+        )
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Not enough next-day data for analysis.")

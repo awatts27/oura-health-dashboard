@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-from data_processing import compute_correlation
+from data_processing import compute_correlation, interpret_r
 
 st.title("Correlation Analysis")
 
@@ -44,7 +44,7 @@ st.subheader("Pre-built Correlation Pairs")
 
 PREBUILT = [
     ("sleep_score", "readiness_score", "Sleep Score vs Readiness Score"),
-    ("readiness_score", "steps", "Readiness vs Steps (previous day effect)"),
+    ("readiness_score", "steps", "Readiness vs Steps (same day)"),
     ("sleep_score", "resting_hr", "Sleep Score vs Resting HR"),
     ("activity_score", "sleep_score", "Activity Score vs Sleep Score"),
 ]
@@ -62,12 +62,10 @@ for i, (col_a, col_b, title) in enumerate(PREBUILT):
             st.write("Not enough data")
             continue
 
-        r2 = r ** 2
-        sig = "significant" if p < 0.05 else "not significant"
-        st.markdown(
-            f"R = {r:.3f} &nbsp;|&nbsp; R² = {r2:.3f} &nbsp;|&nbsp; "
-            f"n = {n} &nbsp;|&nbsp; p = {p:.4f} ({sig})"
-        )
+        interpretation = interpret_r(r)
+        sig = "statistically significant" if p < 0.05 else "not statistically significant"
+        st.markdown(f"**{interpretation.capitalize()}** ({sig}, n={n})")
+        st.caption(f"R = {r:.3f} · R² = {r**2:.3f} · p = {p:.4f}")
 
         fig = px.scatter(
             daily, x=col_a, y=col_b,
@@ -99,11 +97,14 @@ if x_col and y_col and x_col != y_col:
     r, p, n = compute_correlation(daily, x_col, y_col)
 
     if not np.isnan(r):
-        r2 = r ** 2
-        sig = "significant" if p < 0.05 else "not significant"
+        interpretation = interpret_r(r)
+        sig = "statistically significant" if p < 0.05 else "not statistically significant"
+        st.markdown(
+            f"**{interpretation.capitalize()}** — {sig} (n={n})"
+        )
         mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("R", f"{r:.3f}")
-        mc2.metric("R²", f"{r2:.3f}")
+        mc2.metric("R²", f"{r**2:.3f}")
         mc3.metric("n", str(n))
         mc4.metric("p-value", f"{p:.4f}")
 

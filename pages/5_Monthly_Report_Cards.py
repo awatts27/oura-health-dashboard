@@ -108,18 +108,30 @@ metric_to_chart = st.selectbox(
 )
 
 mean_col = f"{metric_to_chart}_mean"
+std_col = f"{metric_to_chart}_std"
 if mean_col in summary.columns:
     values = summary[mean_col]
+
+    # Use standard deviation to set a meaningful change threshold
+    # Only color a bar green/red if the change exceeds noise
+    avg_std = summary[std_col].mean() if std_col in summary.columns else 0
+    threshold = avg_std * 0.25 if pd.notna(avg_std) and avg_std > 0 else 1.0
+
     colors = []
     for i, val in enumerate(values):
         if i == 0:
             colors.append("#7C3AED")
-        elif val > values.iloc[i - 1]:
-            colors.append("#10B981")  # improved
-        elif val < values.iloc[i - 1]:
-            colors.append("#EF4444")  # declined
         else:
-            colors.append("#F59E0B")  # stable
+            diff = val - values.iloc[i - 1]
+            # Invert for resting HR (lower is better)
+            if metric_to_chart == "resting_hr":
+                diff = -diff
+            if diff > threshold:
+                colors.append("#10B981")  # improved
+            elif diff < -threshold:
+                colors.append("#EF4444")  # declined
+            else:
+                colors.append("#6B7280")  # within noise — neutral gray
 
     fig = go.Figure(data=go.Bar(
         x=summary["month"],
@@ -136,6 +148,10 @@ if mean_col in summary.columns:
         xaxis_title="Month",
     )
     st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        "Green = meaningful improvement, Red = meaningful decline, "
+        "Gray = within normal variation."
+    )
 
 # ── Full monthly data table ─────────────────────────────────────────────────
 

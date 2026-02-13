@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from data_processing import add_rolling_averages, compute_trend
+from data_processing import add_rolling_averages, compute_trend, compute_trend_detail
 
 st.title("Long-term Trends")
 
@@ -48,7 +48,8 @@ for label in selected_labels:
     if col not in df.columns:
         continue
 
-    trend = compute_trend(df[col], window=30)
+    detail = compute_trend_detail(df[col], window=30)
+    trend = detail["direction"]
     trend_icons = {"improving": "↑ Improving", "declining": "↓ Declining", "stable": "→ Stable"}
     trend_text = trend_icons.get(trend, trend)
     trend_colors = {"improving": "green", "declining": "red", "stable": "orange"}
@@ -59,6 +60,16 @@ for label in selected_labels:
         f"<span style='font-size:0.8em;color:{color}'>{trend_text}</span>",
         unsafe_allow_html=True,
     )
+
+    # Plain-language description of the trend
+    if trend in ("improving", "declining"):
+        verb = "up" if detail["change"] > 0 else "down"
+        st.caption(
+            f"~{abs(detail['change']):.0f} points {verb} over the last "
+            f"{detail['days']} days ({detail['slope_per_day']:+.1f}/day)"
+        )
+    elif trend == "stable":
+        st.caption(f"Holding steady over the last {detail['days']} days")
 
     fig = go.Figure()
 
