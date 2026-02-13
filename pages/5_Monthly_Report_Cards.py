@@ -29,10 +29,11 @@ FRIENDLY = {
 
 grade = health_trend_grade(daily)
 grade_colors = {"Improving": "#10B981", "Declining": "#EF4444", "Stable": "#F59E0B", "N/A": "#6B7280"}
+color = grade_colors.get(grade, "#6B7280")
 
 st.markdown(
     f"### Health Trend Grade: "
-    f"<span style='color:{grade_colors.get(grade, \"#6B7280\")};font-size:1.4em'>{grade}</span>",
+    f"<span style='color:{color};font-size:1.4em'>{grade}</span>",
     unsafe_allow_html=True,
 )
 
