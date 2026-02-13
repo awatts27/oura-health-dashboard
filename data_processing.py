@@ -104,7 +104,7 @@ def enrich_sleep_periods(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     sp = sp.copy()
 
     for col in ["bedtime_start", "bedtime_end"]:
-        if col in sp.columns and not pd.api.types.is_datetime64_any_dtype(sp[col]):
+        if col in sp.columns:
             sp[col] = pd.to_datetime(sp[col], utc=True, errors="coerce")
 
     if "bedtime_start" in sp.columns:
