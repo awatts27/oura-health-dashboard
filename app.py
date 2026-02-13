@@ -16,6 +16,7 @@ from data_processing import (
     enrich_sleep_periods,
     health_trend_grade,
     compute_trend,
+    generate_key_findings,
 )
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -57,8 +58,9 @@ if daily.empty:
     st.warning("No data returned from Oura. Verify your token and that you have data for the selected range.")
     st.stop()
 
-# KPI row
+# KPI row — compare latest value against 7-day rolling average
 cols = st.columns(5)
+
 
 def _latest(col: str):
     if col in daily.columns:
@@ -66,10 +68,16 @@ def _latest(col: str):
         return vals.iloc[-1] if len(vals) else None
     return None
 
-def _avg(col: str):
+
+def _recent_avg(col: str, window: int = 7):
+    """Average of the prior `window` days (excluding the latest day)."""
     if col in daily.columns:
-        return daily[col].mean()
+        vals = daily[col].dropna()
+        if len(vals) > window:
+            return vals.iloc[-(window + 1):-1].mean()
+        return vals.mean()
     return None
+
 
 def _trend_icon(col: str) -> str:
     if col not in daily.columns:
@@ -77,6 +85,7 @@ def _trend_icon(col: str) -> str:
     t = compute_trend(daily[col])
     icons = {"improving": " ↑", "declining": " ↓", "stable": " →"}
     return icons.get(t, "")
+
 
 metrics = [
     ("Sleep Score", "sleep_score"),
@@ -88,30 +97,29 @@ metrics = [
 
 for col_widget, (label, key) in zip(cols, metrics):
     latest = _latest(key)
-    avg = _avg(key)
+    avg = _recent_avg(key)
     if latest is not None and avg is not None:
         delta = latest - avg
         col_widget.metric(
             label=f"{label}{_trend_icon(key)}",
             value=f"{latest:.0f}",
-            delta=f"{delta:+.1f} vs avg",
+            delta=f"{delta:+.1f} vs 7d avg",
         )
     else:
         col_widget.metric(label=label, value="—")
 
-# Health trend grade
-grade = health_trend_grade(daily)
-grade_colors = {"Improving": "green", "Declining": "red", "Stable": "orange"}
-grade_color = grade_colors.get(grade, "gray")
-st.markdown(
-    f"### Overall Health Trend: "
-    f"<span style='color:{grade_color};font-weight:bold'>{grade}</span>",
-    unsafe_allow_html=True,
-)
+# ── Key findings ────────────────────────────────────────────────────────────
+
+findings = generate_key_findings(daily, sp)
+if findings:
+    st.markdown("### Key Findings")
+    for f in findings:
+        st.markdown(f"- {f}")
 
 st.markdown("---")
 
-# Quick summary table — last 7 days
+# ── Last 7 days with conditional highlighting ───────────────────────────────
+
 st.subheader("Last 7 Days")
 recent = daily.tail(7)
 display_cols = [c for c in ["day", "sleep_score", "readiness_score", "activity_score", "steps", "resting_hr"] if c in recent.columns]
@@ -119,4 +127,38 @@ if display_cols:
     show = recent[display_cols].copy()
     if "day" in show.columns:
         show["day"] = show["day"].dt.strftime("%a %b %d")
-    st.dataframe(show, use_container_width=True, hide_index=True)
+
+    # Highlight cells based on value quality
+    SCORE_COLS = ["sleep_score", "readiness_score", "activity_score"]
+    score_cols_present = [c for c in SCORE_COLS if c in show.columns]
+
+    def _color_scores(val):
+        """Green for good scores, red for poor, neutral for average."""
+        if not isinstance(val, (int, float)) or pd.isna(val):
+            return ""
+        if val >= 85:
+            return "color: #10B981"
+        elif val >= 70:
+            return ""
+        elif val >= 60:
+            return "color: #F59E0B"
+        else:
+            return "color: #EF4444"
+
+    def _color_hr(val):
+        """Lower resting HR is better."""
+        if not isinstance(val, (int, float)) or pd.isna(val):
+            return ""
+        if val <= 55:
+            return "color: #10B981"
+        elif val >= 70:
+            return "color: #EF4444"
+        return ""
+
+    styled = show.style
+    if score_cols_present:
+        styled = styled.map(_color_scores, subset=score_cols_present)
+    if "resting_hr" in show.columns:
+        styled = styled.map(_color_hr, subset=["resting_hr"])
+
+    st.dataframe(styled, use_container_width=True, hide_index=True)

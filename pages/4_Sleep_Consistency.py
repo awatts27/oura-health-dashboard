@@ -75,15 +75,37 @@ if has_bedtime or has_wake:
                 line=dict(width=2, color="#06B6D4", dash="dash"),
             ))
 
+    # Clock-time y-axis labels instead of decimal hours
+    bedtime_ticks = list(range(20, 28))  # 20:00 to 03:00 (27 = 3 AM adjusted)
+    bedtime_labels = [f"{h % 24}:00" for h in bedtime_ticks]
+    wake_ticks = list(range(5, 12))
+    all_ticks = sorted(set(bedtime_ticks + wake_ticks))
+    all_labels = [f"{h % 24:02d}:00" for h in all_ticks]
+
     fig.update_layout(
         template="plotly_dark",
         height=400,
         margin=dict(l=20, r=20, t=10, b=20),
-        yaxis_title="Hour of Day",
+        yaxis_title="Time",
+        yaxis=dict(tickvals=all_ticks, ticktext=all_labels),
         xaxis_title="",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+    # Identify outlier nights
+    if has_bedtime and len(sp) >= 14:
+        bt_mean = sp["bedtime_hour_adj"].mean()
+        bt_std = sp["bedtime_hour_adj"].std()
+        if pd.notna(bt_std) and bt_std > 0:
+            late_nights = sp[sp["bedtime_hour_adj"] > bt_mean + 1.5 * bt_std]
+            if not late_nights.empty:
+                late_days = late_nights["day"].dt.strftime("%A").value_counts()
+                top_day = late_days.index[0]
+                st.caption(
+                    f"Your latest bedtimes tend to fall on **{top_day}s** — "
+                    f"{len(late_nights)} unusually late nights in this period."
+                )
 else:
     st.warning("Bedtime/wake time data not available.")
 
@@ -113,11 +135,14 @@ if "sleep_midpoint" in sp.columns:
             line=dict(width=2, color="#F59E0B", dash="dash"),
         ))
 
+    mid_ticks = list(range(0, 8))  # midnight to 7 AM
+    mid_labels = [f"{h:02d}:00" for h in mid_ticks]
     fig.update_layout(
         template="plotly_dark",
         height=350,
         margin=dict(l=20, r=20, t=10, b=20),
-        yaxis_title="Hour of Day",
+        yaxis_title="Time",
+        yaxis=dict(tickvals=mid_ticks, ticktext=mid_labels),
         xaxis_title="",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -145,6 +170,21 @@ if "day" in sp.columns:
                 f"<span style='color:{severity_color}'>{severity}</span>",
                 unsafe_allow_html=True,
             )
+
+        # Actionable explanation after the metrics row
+        if "social_jet_lag_hrs" in stats:
+            sjl = stats["social_jet_lag_hrs"]
+            if sjl >= 1.0:
+                st.info(
+                    f"Your sleep midpoint shifts by **{sjl:.1f} hours** between weekdays and "
+                    f"weekends — equivalent to crossing a time zone. Try keeping weekend "
+                    f"bed/wake times within 30 min of your weekday schedule."
+                )
+            elif sjl >= 0.5:
+                st.info(
+                    f"A {sjl:.1f}-hour weekend shift is moderate. Your body can mostly "
+                    f"adapt, but tightening it up could improve Monday readiness."
+                )
 
         if "weekday_midpoint" in stats:
             cols[1].metric("Weekday Midpoint", _fmt_hour(stats["weekday_midpoint"]))

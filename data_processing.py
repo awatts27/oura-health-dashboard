@@ -181,6 +181,132 @@ def compute_trend(series: pd.Series, window: int = 30) -> str:
     return "stable"
 
 
+def compute_trend_detail(series: pd.Series, window: int = 30) -> dict:
+    """Return detailed trend info: direction, total change, and per-day slope."""
+    recent = series.dropna().tail(window)
+    n = len(recent)
+    if n < 7:
+        return {"direction": "insufficient data", "change": 0.0, "slope_per_day": 0.0, "days": n}
+
+    x = np.arange(n)
+    slope, intercept, _, _, _ = stats.linregress(x, recent.values)
+    total_change = slope * (n - 1)
+    return {
+        "direction": compute_trend(series, window),
+        "change": round(total_change, 1),
+        "slope_per_day": round(slope, 2),
+        "days": n,
+    }
+
+
+def generate_key_findings(daily: pd.DataFrame, sleep_periods: pd.DataFrame = None) -> list[str]:
+    """Generate plain-language key findings from the data."""
+    findings = []
+
+    # 1. Biggest recent change in any core metric
+    METRICS = {
+        "sleep_score": "Sleep score",
+        "readiness_score": "Readiness score",
+        "activity_score": "Activity score",
+        "resting_hr": "Resting heart rate",
+        "steps": "Daily steps",
+    }
+    biggest_change = None
+    biggest_abs = 0
+    for col, label in METRICS.items():
+        if col not in daily.columns:
+            continue
+        detail = compute_trend_detail(daily[col], window=21)
+        if detail["direction"] == "insufficient data":
+            continue
+        if abs(detail["change"]) > biggest_abs:
+            biggest_abs = abs(detail["change"])
+            biggest_change = (col, label, detail)
+
+    if biggest_change:
+        col, label, detail = biggest_change
+        direction = "up" if detail["change"] > 0 else "down"
+        verb = "climbed" if detail["change"] > 0 else "dropped"
+        # For resting HR, direction meaning is inverted
+        if col == "resting_hr":
+            qualifier = " (higher is worse)" if detail["change"] > 0 else " (lower is better)"
+        else:
+            qualifier = ""
+        findings.append(
+            f"**{label}** has {verb} ~{abs(detail['change']):.0f} points over the last "
+            f"{detail['days']} days{qualifier}."
+        )
+
+    # 2. Best and worst day of week for sleep
+    if "day_of_week" in daily.columns and "sleep_score" in daily.columns:
+        dow = daily.groupby("day_of_week")["sleep_score"].mean()
+        if len(dow) >= 5:
+            best = dow.idxmax()
+            worst = dow.idxmin()
+            gap = dow.max() - dow.min()
+            if gap > 2:
+                findings.append(
+                    f"Your best sleep nights are **{best}s** (avg {dow[best]:.0f}) "
+                    f"and worst are **{worst}s** (avg {dow[worst]:.0f})."
+                )
+
+    # 3. Weekend vs weekday difference
+    if "is_weekend" in daily.columns and "sleep_score" in daily.columns:
+        wkday_avg = daily.loc[~daily["is_weekend"], "sleep_score"].mean()
+        wkend_avg = daily.loc[daily["is_weekend"], "sleep_score"].mean()
+        if pd.notna(wkday_avg) and pd.notna(wkend_avg):
+            diff = wkend_avg - wkday_avg
+            if abs(diff) > 2:
+                better = "weekends" if diff > 0 else "weekdays"
+                findings.append(
+                    f"You sleep **{abs(diff):.1f} points** better on {better}."
+                )
+
+    # 4. Resting HR trend warning
+    if "resting_hr" in daily.columns:
+        hr_detail = compute_trend_detail(daily["resting_hr"], window=14)
+        if hr_detail["direction"] == "improving":  # improving = declining for HR
+            pass  # already covered above potentially
+        elif hr_detail["change"] > 1.5:
+            findings.append(
+                f"Resting heart rate has risen ~{hr_detail['change']:.0f} bpm over "
+                f"the last 2 weeks — worth keeping an eye on."
+            )
+
+    # 5. Sleep consistency insight
+    if sleep_periods is not None and not sleep_periods.empty and "bedtime_hour_adj" in sleep_periods.columns:
+        std = sleep_periods["bedtime_hour_adj"].std()
+        if pd.notna(std):
+            if std > 1.5:
+                findings.append(
+                    f"Your bedtime varies by **\u00b1{std:.1f} hours** — "
+                    f"high variability can affect sleep quality."
+                )
+            elif std < 0.5:
+                findings.append(
+                    f"Your bedtime is very consistent (\u00b1{std:.1f} hrs) — that's great for sleep quality."
+                )
+
+    return findings
+
+
+def interpret_r(r: float) -> str:
+    """Return a plain-language interpretation of a Pearson R value."""
+    abs_r = abs(r)
+    if abs_r < 0.1:
+        strength = "negligible"
+    elif abs_r < 0.3:
+        strength = "weak"
+    elif abs_r < 0.5:
+        strength = "moderate"
+    elif abs_r < 0.7:
+        strength = "strong"
+    else:
+        strength = "very strong"
+    direction = "positive" if r > 0 else "negative"
+    return f"{strength} {direction} correlation"
+
+
 # ---------------------------------------------------------------------------
 # Correlation helpers
 # ---------------------------------------------------------------------------
