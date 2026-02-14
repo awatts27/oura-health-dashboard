@@ -14,12 +14,13 @@ if daily is None or daily.empty:
     st.info("Load data from the main Overview page first.")
     st.stop()
 
-KEY_METRICS = ["sleep_score", "readiness_score", "activity_score", "steps", "resting_hr"]
+KEY_METRICS = ["sleep_score", "readiness_score", "average_hrv", "activity_score", "steps", "resting_hr"]
 available_metrics = [m for m in KEY_METRICS if m in daily.columns]
 
 FRIENDLY = {
     "sleep_score": "Sleep Score",
     "readiness_score": "Readiness Score",
+    "average_hrv": "HRV (ms)",
     "activity_score": "Activity Score",
     "steps": "Steps",
     "resting_hr": "Resting HR",
@@ -41,7 +42,7 @@ st.markdown(
 
 st.subheader("Streaks")
 streak_cols = st.columns(len(available_metrics))
-thresholds = {"sleep_score": 70, "readiness_score": 70, "activity_score": 70, "steps": 7000, "resting_hr": 999}
+thresholds = {"sleep_score": 70, "readiness_score": 70, "average_hrv": 30, "activity_score": 70, "steps": 7000, "resting_hr": 999}
 
 for col_w, metric in zip(streak_cols, available_metrics):
     threshold = thresholds.get(metric, 70)

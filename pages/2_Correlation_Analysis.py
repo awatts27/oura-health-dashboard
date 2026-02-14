@@ -22,6 +22,7 @@ numeric_cols = [c for c in numeric_cols if c not in exclude]
 FRIENDLY_NAMES = {
     "sleep_score": "Sleep Score",
     "readiness_score": "Readiness Score",
+    "average_hrv": "HRV",
     "activity_score": "Activity Score",
     "steps": "Steps",
     "resting_hr": "Resting HR",
@@ -44,7 +45,8 @@ st.subheader("Pre-built Correlation Pairs")
 
 PREBUILT = [
     ("sleep_score", "readiness_score", "Sleep Score vs Readiness Score"),
-    ("readiness_score", "steps", "Readiness vs Steps (same day)"),
+    ("average_hrv", "readiness_score", "HRV vs Readiness Score"),
+    ("average_hrv", "sleep_score", "HRV vs Sleep Score"),
     ("sleep_score", "resting_hr", "Sleep Score vs Resting HR"),
     ("activity_score", "sleep_score", "Activity Score vs Sleep Score"),
 ]
@@ -131,9 +133,10 @@ elif x_col == y_col:
 st.markdown("---")
 st.subheader("Correlation Matrix")
 
-key_metrics = [c for c in ["sleep_score", "readiness_score", "activity_score",
-                            "steps", "resting_hr", "avg_hr", "total_calories",
-                            "active_calories", "sedentary_time"] if c in daily.columns]
+key_metrics = [c for c in ["sleep_score", "readiness_score", "average_hrv",
+                            "activity_score", "steps", "resting_hr", "avg_hr",
+                            "total_calories", "active_calories",
+                            "sedentary_time"] if c in daily.columns]
 
 if len(key_metrics) >= 2:
     corr = daily[key_metrics].corr()

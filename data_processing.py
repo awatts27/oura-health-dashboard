@@ -65,6 +65,32 @@ def build_daily_df(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 # Heart rate daily aggregates
 # ---------------------------------------------------------------------------
 
+def daily_hrv(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Extract daily average HRV from sleep period data.
+
+    The Oura v2 ``sleep`` endpoint includes ``average_hrv`` (ms) per sleep
+    period.  We keep only the primary (long) sleep and return one row per day.
+    """
+    sp = data.get("sleep_periods", pd.DataFrame())
+    if sp.empty or "average_hrv" not in sp.columns:
+        return pd.DataFrame()
+
+    sp = sp.copy()
+    if "type" in sp.columns:
+        sp = sp[sp["type"] == "long_sleep"]
+
+    if "day" not in sp.columns or sp.empty:
+        return pd.DataFrame()
+
+    # One HRV value per day (take first long-sleep period if duplicates)
+    cols = ["day", "average_hrv"]
+    if "lowest_hrv" in sp.columns:
+        cols.append("lowest_hrv")
+    out = sp[cols].drop_duplicates(subset="day", keep="first").copy()
+    out["day"] = pd.to_datetime(out["day"])
+    return out.sort_values("day").reset_index(drop=True)
+
+
 def daily_hr_stats(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Aggregate heart rate samples into daily stats (resting-source only)."""
     hr = data.get("heart_rate", pd.DataFrame())
@@ -208,6 +234,7 @@ def generate_key_findings(daily: pd.DataFrame, sleep_periods: pd.DataFrame = Non
         "sleep_score": "Sleep score",
         "readiness_score": "Readiness score",
         "activity_score": "Activity score",
+        "average_hrv": "HRV",
         "resting_hr": "Resting heart rate",
         "steps": "Daily steps",
     }
@@ -262,7 +289,21 @@ def generate_key_findings(daily: pd.DataFrame, sleep_periods: pd.DataFrame = Non
                     f"You sleep **{abs(diff):.1f} points** better on {better}."
                 )
 
-    # 4. Resting HR trend warning
+    # 4. HRV trend insight
+    if "average_hrv" in daily.columns:
+        hrv_detail = compute_trend_detail(daily["average_hrv"], window=14)
+        if hrv_detail["direction"] == "declining" and hrv_detail["change"] < -2:
+            findings.append(
+                f"HRV has dropped ~{abs(hrv_detail['change']):.0f} ms over "
+                f"the last 2 weeks — consider prioritising recovery."
+            )
+        elif hrv_detail["direction"] == "improving" and hrv_detail["change"] > 2:
+            findings.append(
+                f"HRV is up ~{hrv_detail['change']:.0f} ms over the last "
+                f"2 weeks — your recovery is trending well."
+            )
+
+    # 5. Resting HR trend warning
     if "resting_hr" in daily.columns:
         hr_detail = compute_trend_detail(daily["resting_hr"], window=14)
         if hr_detail["direction"] == "improving":  # improving = declining for HR
@@ -421,7 +462,7 @@ def compute_streaks(series: pd.Series, threshold: float) -> dict:
 def health_trend_grade(df: pd.DataFrame) -> str:
     """Simple composite health trend grade based on key metrics."""
     trends = []
-    for col in ["sleep_score", "readiness_score", "resting_hr"]:
+    for col in ["sleep_score", "readiness_score", "average_hrv", "resting_hr"]:
         if col in df.columns:
             t = compute_trend(df[col])
             if col == "resting_hr":

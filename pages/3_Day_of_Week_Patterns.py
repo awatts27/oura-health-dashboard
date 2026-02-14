@@ -17,6 +17,7 @@ if daily is None or daily.empty:
 METRICS = {
     "Sleep Score": "sleep_score",
     "Readiness Score": "readiness_score",
+    "HRV": "average_hrv",
     "Activity Score": "activity_score",
     "Resting HR": "resting_hr",
     "Steps": "steps",
@@ -135,6 +136,10 @@ if "is_weekend" in daily.columns:
             if abs(diff) > 1:
                 better = "weekdays" if diff > 0 else "weekends"
                 callouts.append(f"Resting HR is **{abs(diff):.0f} bpm lower** on {better}")
+        elif col == "average_hrv":
+            if abs(diff) > 2:
+                higher = "weekends" if diff > 0 else "weekdays"
+                callouts.append(f"HRV is **{abs(diff):.0f} ms higher** on {higher}")
         elif col == "steps":
             if abs(diff) > 500:
                 more = "weekends" if diff > 0 else "weekdays"
