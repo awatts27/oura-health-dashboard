@@ -67,7 +67,7 @@ for i, (col_a, col_b, title) in enumerate(PREBUILT):
         interpretation = interpret_r(r)
         sig = "statistically significant" if p < 0.05 else "not statistically significant"
         st.markdown(f"**{interpretation.capitalize()}** ({sig}, n={n})")
-        st.caption(f"R = {r:.3f} · R² = {r**2:.3f} · p = {p:.4f}")
+        st.caption(f"R = {r:.2f} · R² = {r**2:.2f} · p = {p:.3f}")
 
         fig = px.scatter(
             daily, x=col_a, y=col_b,
@@ -105,10 +105,10 @@ if x_col and y_col and x_col != y_col:
             f"**{interpretation.capitalize()}** — {sig} (n={n})"
         )
         mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("R", f"{r:.3f}")
-        mc2.metric("R²", f"{r**2:.3f}")
+        mc1.metric("R", f"{r:.2f}")
+        mc2.metric("R²", f"{r**2:.2f}")
         mc3.metric("n", str(n))
-        mc4.metric("p-value", f"{p:.4f}")
+        mc4.metric("p-value", f"{p:.3f}")
 
         fig = px.scatter(
             daily, x=x_col, y=y_col,
@@ -142,15 +142,21 @@ if len(key_metrics) >= 2:
     corr = daily[key_metrics].corr()
     labels = [friendly(c) for c in key_metrics]
 
+    # Use a muted blue-gray-orange palette instead of intense red-blue
+    corr_scale = [
+        [0.0, "#4a6fa5"],   # muted blue (negative)
+        [0.5, "#2d3748"],   # dark gray (zero)
+        [1.0, "#c97b3d"],   # muted amber (positive)
+    ]
     fig = go.Figure(data=go.Heatmap(
         z=corr.values,
         x=labels,
         y=labels,
-        colorscale="RdBu_r",
+        colorscale=corr_scale,
         zmid=0,
         text=corr.values.round(2),
         texttemplate="%{text}",
-        textfont=dict(size=11),
+        textfont=dict(size=11, color="white"),
     ))
     fig.update_layout(
         template="plotly_dark",

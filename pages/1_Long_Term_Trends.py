@@ -32,7 +32,7 @@ if not available:
 selected_labels = st.multiselect(
     "Metrics to display",
     list(available.keys()),
-    default=list(available.keys())[:4],
+    default=list(available.keys())[:2],
 )
 
 windows = st.multiselect(

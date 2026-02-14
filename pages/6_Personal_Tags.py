@@ -19,6 +19,7 @@ TAGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "tags.json")
 FRIENDLY = {
     "sleep_score": "Sleep Score",
     "readiness_score": "Readiness Score",
+    "average_hrv": "HRV (ms)",
     "activity_score": "Activity Score",
     "steps": "Steps",
     "resting_hr": "Resting HR",
@@ -149,8 +150,8 @@ if selected_tag:
                 comparison.append({
                     "Metric": FRIENDLY.get(metric, metric),
                     "metric_key": metric,
-                    f"Tagged ({selected_tag})": round(tagged_mean, 1),
-                    "Baseline": round(baseline_mean, 1),
+                    f"Tagged ({selected_tag})": round(tagged_mean),
+                    "Baseline": round(baseline_mean),
                     "Difference": round(diff, 1),
                     "Diff %": round(pct, 1),
                 })
@@ -209,8 +210,8 @@ if selected_tag:
                 next_day_comparison.append({
                     "Metric": FRIENDLY.get(metric, metric),
                     "metric_key": metric,
-                    "Day After": round(nd_mean, 1),
-                    "Baseline": round(bl_mean, 1),
+                    "Day After": round(nd_mean),
+                    "Baseline": round(bl_mean),
                     "Difference": round(diff, 1),
                     "Diff %": round(pct, 1),
                 })

@@ -123,7 +123,11 @@ def fetch_sleep_periods(days: int = 90) -> pd.DataFrame:
     df = pd.json_normalize(data)
     for col in ["bedtime_start", "bedtime_end"]:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], utc=True)
+            # Preserve wall-clock (local) time by parsing the datetime portion
+            # before timezone offset.  Bedtime/wake analysis needs local time,
+            # not UTC (a 23:00 bedtime should stay 23:00 regardless of TZ).
+            raw = df[col].astype(str).str[:19]
+            df[col] = pd.to_datetime(raw, errors="coerce")
     if "day" in df.columns:
         df["day"] = pd.to_datetime(df["day"])
         df = df.sort_values("day").reset_index(drop=True)

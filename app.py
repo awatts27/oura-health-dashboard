@@ -94,34 +94,44 @@ def _trend_icon(col: str) -> str:
 
 
 metrics = [
-    ("Sleep Score", "sleep_score"),
-    ("Readiness Score", "readiness_score"),
-    ("HRV (ms)", "average_hrv"),
-    ("Activity Score", "activity_score"),
-    ("Resting HR", "resting_hr"),
-    ("Steps", "steps"),
+    ("Sleep Score", "sleep_score", "😴"),
+    ("Readiness", "readiness_score", "⚡"),
+    ("HRV (ms)", "average_hrv", "💓"),
+    ("Activity", "activity_score", "🏃"),
+    ("Resting HR", "resting_hr", "❤️"),
+    ("Steps", "steps", "👟"),
 ]
 
-for col_widget, (label, key) in zip(cols, metrics):
+# Metrics where a LOWER value is better (positive delta = bad)
+LOWER_IS_BETTER = {"resting_hr"}
+
+for col_widget, (label, key, emoji) in zip(cols, metrics):
     latest = _latest(key)
     avg = _recent_avg(key)
     if latest is not None and avg is not None:
         delta = latest - avg
         col_widget.metric(
-            label=f"{label}{_trend_icon(key)}",
+            label=f"{emoji} {label}{_trend_icon(key)}",
             value=f"{latest:.0f}",
             delta=f"{delta:+.1f} vs 7d avg",
+            delta_color="inverse" if key in LOWER_IS_BETTER else "normal",
         )
     else:
-        col_widget.metric(label=label, value="—")
+        col_widget.metric(label=f"{emoji} {label}", value="—")
+
+# Show which date the latest values are from
+latest_day = daily["day"].dropna().iloc[-1] if not daily["day"].dropna().empty else None
+if latest_day is not None:
+    st.caption(f"Latest data: **{latest_day.strftime('%A, %b %d %Y')}**")
 
 # ── Key findings ────────────────────────────────────────────────────────────
 
 findings = generate_key_findings(daily, sp)
 if findings:
     st.markdown("### Key Findings")
-    for f in findings:
-        st.markdown(f"- {f}")
+    with st.container(border=True):
+        for f in findings:
+            st.markdown(f"- {f}")
 
 st.markdown("---")
 
@@ -130,14 +140,31 @@ st.markdown("---")
 st.subheader("Last 7 Days")
 recent = daily.tail(7)
 display_cols = [c for c in ["day", "sleep_score", "readiness_score", "average_hrv", "activity_score", "steps", "resting_hr"] if c in recent.columns]
+
+COLUMN_LABELS = {
+    "day": "Day",
+    "sleep_score": "Sleep",
+    "readiness_score": "Readiness",
+    "average_hrv": "HRV",
+    "activity_score": "Activity",
+    "steps": "Steps",
+    "resting_hr": "Resting HR",
+}
+
 if display_cols:
     show = recent[display_cols].copy()
     if "day" in show.columns:
         show["day"] = show["day"].dt.strftime("%a %b %d")
 
+    # Round numeric columns to remove excessive decimals
+    num_cols = show.select_dtypes(include="number").columns
+    show[num_cols] = show[num_cols].round(0).astype("Int64")
+
+    # Rename to friendly labels
+    show = show.rename(columns=COLUMN_LABELS)
+
     # Highlight cells based on value quality
-    SCORE_COLS = ["sleep_score", "readiness_score", "activity_score"]
-    score_cols_present = [c for c in SCORE_COLS if c in show.columns]
+    SCORE_LABELS = [COLUMN_LABELS[c] for c in ["sleep_score", "readiness_score", "activity_score"] if c in display_cols]
 
     def _color_scores(val):
         """Green for good scores, red for poor, neutral for average."""
@@ -173,11 +200,11 @@ if display_cols:
         return ""
 
     styled = show.style
-    if score_cols_present:
-        styled = styled.map(_color_scores, subset=score_cols_present)
-    if "average_hrv" in show.columns:
-        styled = styled.map(_color_hrv, subset=["average_hrv"])
-    if "resting_hr" in show.columns:
-        styled = styled.map(_color_hr, subset=["resting_hr"])
+    if SCORE_LABELS:
+        styled = styled.map(_color_scores, subset=SCORE_LABELS)
+    if "HRV" in show.columns:
+        styled = styled.map(_color_hrv, subset=["HRV"])
+    if "Resting HR" in show.columns:
+        styled = styled.map(_color_hr, subset=["Resting HR"])
 
     st.dataframe(styled, use_container_width=True, hide_index=True)

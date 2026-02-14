@@ -38,40 +38,57 @@ if dow.empty:
 # ── Heatmap (per-metric z-score normalization) ──────────────────────────────
 
 st.subheader("Heatmap — Average Metrics by Day")
-st.caption("Colors are normalized per metric so each row shows its own best/worst pattern.")
+st.caption("Colors are normalized per row (metric) to highlight each metric's own weekly pattern. Greener = better for that metric.")
 
-heatmap_data = dow.set_index("day_of_week")[metric_cols].T
-labels = [k for k, v in available.items()]
+# Drop metrics that are entirely NaN (e.g. Resting HR if no HR data)
+valid_metrics = {k: v for k, v in available.items()
+                 if v in dow.columns and dow[v].notna().any()}
+valid_cols = list(valid_metrics.values())
+valid_labels = list(valid_metrics.keys())
 
-# Normalize each row (metric) to 0-1 range so different scales are comparable
-raw_values = heatmap_data.values
-row_min = raw_values.min(axis=1, keepdims=True)
-row_max = raw_values.max(axis=1, keepdims=True)
-row_range = row_max - row_min
-row_range[row_range == 0] = 1  # avoid division by zero
-normalized = (raw_values - row_min) / row_range
+if valid_cols:
+    heatmap_data = dow.set_index("day_of_week")[valid_cols].T
 
-# For resting HR, invert (lower is better)
-for i, col in enumerate(metric_cols):
-    if col == "resting_hr":
-        normalized[i] = 1.0 - normalized[i]
+    # Normalize each row (metric) to 0-1 range so different scales are comparable
+    raw_values = heatmap_data.values
+    row_min = raw_values.min(axis=1, keepdims=True)
+    row_max = raw_values.max(axis=1, keepdims=True)
+    row_range = row_max - row_min
+    row_range[row_range == 0] = 1  # avoid division by zero
+    normalized = (raw_values - row_min) / row_range
 
-fig = go.Figure(data=go.Heatmap(
-    z=normalized,
-    x=heatmap_data.columns.tolist(),
-    y=labels,
-    colorscale="RdYlGn",
-    text=heatmap_data.values.round(1),
-    texttemplate="%{text}",
-    textfont=dict(size=12),
-    showscale=False,
-))
-fig.update_layout(
-    template="plotly_dark",
-    height=50 + 60 * len(labels),
-    margin=dict(l=20, r=20, t=10, b=20),
-)
-st.plotly_chart(fig, use_container_width=True)
+    # For resting HR, invert (lower is better)
+    for i, col in enumerate(valid_cols):
+        if col == "resting_hr":
+            normalized[i] = 1.0 - normalized[i]
+
+    # Subtle green-gray palette instead of screaming red-yellow-green
+    subtle_scale = [
+        [0.0, "#3b3b4f"],    # muted dark (worst)
+        [0.35, "#4a5568"],   # gray
+        [0.5, "#718096"],    # neutral gray
+        [0.7, "#68d391"],    # soft green
+        [1.0, "#38a169"],    # green (best)
+    ]
+
+    fig = go.Figure(data=go.Heatmap(
+        z=normalized,
+        x=heatmap_data.columns.tolist(),
+        y=valid_labels,
+        colorscale=subtle_scale,
+        text=heatmap_data.values.round(0).astype(int),
+        texttemplate="%{text}",
+        textfont=dict(size=12, color="white"),
+        showscale=False,
+    ))
+    fig.update_layout(
+        template="plotly_dark",
+        height=50 + 60 * len(valid_labels),
+        margin=dict(l=20, r=20, t=10, b=20),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No metrics with enough data for the heatmap.")
 
 # ── Grouped bar charts per metric ────────────────────────────────────────────
 
@@ -105,14 +122,19 @@ for label, col in available.items():
         x=dow["day_of_week"],
         y=dow[col],
         marker_color=colors,
-        text=dow[col].round(1),
+        text=dow[col].round(0).astype(int),
         textposition="outside",
+        textfont=dict(size=11),
     ))
+    y_max = dow[col].max()
+    y_min = dow[col].min()
+    pad = (y_max - y_min) * 0.15 if y_max != y_min else y_max * 0.1
     fig.update_layout(
         template="plotly_dark",
         height=300,
-        margin=dict(l=20, r=20, t=10, b=20),
+        margin=dict(l=20, r=20, t=30, b=20),
         yaxis_title=label,
+        yaxis_range=[max(0, y_min - pad), y_max + pad],
         xaxis_title="",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -147,7 +169,7 @@ if "is_weekend" in daily.columns:
         else:
             if abs(diff) > 2:
                 better = "weekends" if diff > 0 else "weekdays"
-                callouts.append(f"{label} is **{abs(diff):.1f} points higher** on {better}")
+                callouts.append(f"{label} is **{abs(diff):.0f} points higher** on {better}")
 
     if callouts:
         for c in callouts:
@@ -164,4 +186,4 @@ if "is_weekend" in daily.columns:
         comparison.index = [k for k, v in available.items() if v in comparison.index.tolist()] or comparison.index
         comparison["Difference"] = comparison["Weekend"] - comparison["Weekday"]
         comparison["Diff %"] = (comparison["Difference"] / comparison["Weekday"] * 100).round(1)
-        st.dataframe(comparison.round(1), use_container_width=True)
+        st.dataframe(comparison.round(0), use_container_width=True)

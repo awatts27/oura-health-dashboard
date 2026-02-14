@@ -8,6 +8,10 @@ import pandas as pd
 from data_processing import sleep_consistency_stats
 
 st.title("Sleep Consistency")
+st.caption(
+    "Keeping a regular sleep schedule is one of the strongest levers for sleep quality. "
+    "This page tracks when you go to bed, when you wake up, and how consistent those times are."
+)
 
 sp = st.session_state.get("sleep_periods")
 daily = st.session_state.get("daily")
@@ -30,68 +34,74 @@ st.subheader("Bedtime & Wake Time Over Time")
 
 has_bedtime = "bedtime_hour_adj" in sp.columns
 has_wake = "waketime_hour" in sp.columns
+sp_sorted = sp.sort_values("day") if not sp.empty else sp
 
 if has_bedtime or has_wake:
-    fig = go.Figure()
+    chart_left, chart_right = st.columns(2)
 
+    # ── Bedtime chart ──
     if has_bedtime:
-        fig.add_trace(go.Scatter(
-            x=sp["day"], y=sp["bedtime_hour_adj"],
-            mode="markers+lines",
-            name="Bedtime",
-            marker=dict(size=5, color="#7C3AED"),
-            line=dict(width=1, color="#7C3AED"),
-            hovertemplate="%{x|%b %d}<br>Bedtime: %{customdata}<extra></extra>",
-            customdata=sp["bedtime_hour_adj"].apply(_fmt_hour),
-        ))
-        # Rolling average
-        if len(sp) >= 7:
-            sp_sorted = sp.sort_values("day")
-            bt_ma = sp_sorted["bedtime_hour_adj"].rolling(7, min_periods=3).mean()
-            fig.add_trace(go.Scatter(
-                x=sp_sorted["day"], y=bt_ma,
-                mode="lines",
-                name="Bedtime 7d avg",
-                line=dict(width=2, color="#7C3AED", dash="dash"),
+        with chart_left:
+            st.markdown("**Bedtime**")
+            fig_bt = go.Figure()
+            fig_bt.add_trace(go.Scatter(
+                x=sp_sorted["day"], y=sp_sorted["bedtime_hour_adj"],
+                mode="markers+lines",
+                name="Bedtime",
+                marker=dict(size=4, color="#7C3AED"),
+                line=dict(width=1, color="#7C3AED"),
+                hovertemplate="%{x|%b %d}<br>Bedtime: %{customdata}<extra></extra>",
+                customdata=sp_sorted["bedtime_hour_adj"].apply(_fmt_hour),
             ))
+            if len(sp_sorted) >= 7:
+                bt_ma = sp_sorted["bedtime_hour_adj"].rolling(7, min_periods=3).mean()
+                fig_bt.add_trace(go.Scatter(
+                    x=sp_sorted["day"], y=bt_ma,
+                    mode="lines", name="7d avg",
+                    line=dict(width=2, color="#7C3AED", dash="dash"),
+                ))
 
+            bt_ticks = list(range(20, 28))
+            bt_labels = [f"{h % 24:02d}:00" for h in bt_ticks]
+            fig_bt.update_layout(
+                template="plotly_dark", height=300,
+                margin=dict(l=20, r=20, t=10, b=20),
+                yaxis_title="Time", yaxis=dict(tickvals=bt_ticks, ticktext=bt_labels),
+                xaxis_title="", showlegend=False,
+            )
+            st.plotly_chart(fig_bt, use_container_width=True)
+
+    # ── Wake time chart ──
     if has_wake:
-        fig.add_trace(go.Scatter(
-            x=sp["day"], y=sp["waketime_hour"],
-            mode="markers+lines",
-            name="Wake time",
-            marker=dict(size=5, color="#06B6D4"),
-            line=dict(width=1, color="#06B6D4"),
-            hovertemplate="%{x|%b %d}<br>Wake: %{customdata}<extra></extra>",
-            customdata=sp["waketime_hour"].apply(_fmt_hour),
-        ))
-        if len(sp) >= 7:
-            sp_sorted = sp.sort_values("day")
-            wt_ma = sp_sorted["waketime_hour"].rolling(7, min_periods=3).mean()
-            fig.add_trace(go.Scatter(
-                x=sp_sorted["day"], y=wt_ma,
-                mode="lines",
-                name="Wake 7d avg",
-                line=dict(width=2, color="#06B6D4", dash="dash"),
+        with chart_right:
+            st.markdown("**Wake Time**")
+            fig_wt = go.Figure()
+            fig_wt.add_trace(go.Scatter(
+                x=sp_sorted["day"], y=sp_sorted["waketime_hour"],
+                mode="markers+lines",
+                name="Wake time",
+                marker=dict(size=4, color="#06B6D4"),
+                line=dict(width=1, color="#06B6D4"),
+                hovertemplate="%{x|%b %d}<br>Wake: %{customdata}<extra></extra>",
+                customdata=sp_sorted["waketime_hour"].apply(_fmt_hour),
             ))
+            if len(sp_sorted) >= 7:
+                wt_ma = sp_sorted["waketime_hour"].rolling(7, min_periods=3).mean()
+                fig_wt.add_trace(go.Scatter(
+                    x=sp_sorted["day"], y=wt_ma,
+                    mode="lines", name="7d avg",
+                    line=dict(width=2, color="#06B6D4", dash="dash"),
+                ))
 
-    # Clock-time y-axis labels instead of decimal hours
-    bedtime_ticks = list(range(20, 28))  # 20:00 to 03:00 (27 = 3 AM adjusted)
-    bedtime_labels = [f"{h % 24}:00" for h in bedtime_ticks]
-    wake_ticks = list(range(5, 12))
-    all_ticks = sorted(set(bedtime_ticks + wake_ticks))
-    all_labels = [f"{h % 24:02d}:00" for h in all_ticks]
-
-    fig.update_layout(
-        template="plotly_dark",
-        height=400,
-        margin=dict(l=20, r=20, t=10, b=20),
-        yaxis_title="Time",
-        yaxis=dict(tickvals=all_ticks, ticktext=all_labels),
-        xaxis_title="",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+            wt_ticks = list(range(5, 12))
+            wt_labels = [f"{h:02d}:00" for h in wt_ticks]
+            fig_wt.update_layout(
+                template="plotly_dark", height=300,
+                margin=dict(l=20, r=20, t=10, b=20),
+                yaxis_title="Time", yaxis=dict(tickvals=wt_ticks, ticktext=wt_labels),
+                xaxis_title="", showlegend=False,
+            )
+            st.plotly_chart(fig_wt, use_container_width=True)
 
     # Identify outlier nights
     if has_bedtime and len(sp) >= 14:
@@ -112,6 +122,11 @@ else:
 # ── Sleep midpoint drift ────────────────────────────────────────────────────
 
 st.subheader("Sleep Midpoint Drift")
+st.caption(
+    "**Sleep midpoint** is the halfway point between when you fall asleep and when you wake up. "
+    "For example, sleeping 11 PM – 7 AM gives a midpoint of 3 AM. "
+    "A consistent midpoint signals a stable circadian rhythm."
+)
 
 if "sleep_midpoint" in sp.columns:
     fig = go.Figure()
@@ -152,6 +167,11 @@ else:
 # ── Social jet lag ──────────────────────────────────────────────────────────
 
 st.subheader("Social Jet Lag")
+st.caption(
+    "**Social jet lag** measures the difference between your weekday and weekend sleep timing. "
+    "A large shift (1+ hours) is like crossing a time zone every weekend — it can leave you "
+    "feeling groggy on Mondays and disrupt your circadian rhythm."
+)
 
 if "day" in sp.columns:
     sp_with_weekend = sp.copy()
