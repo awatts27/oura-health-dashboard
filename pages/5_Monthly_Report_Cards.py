@@ -92,7 +92,10 @@ for col_w, metric in zip(card_cols, available_metrics):
             delta_str = f"{diff:+.1f} vs prev month"
 
     if pd.notna(mean_val):
-        col_w.metric(label, f"{mean_val:.1f}", delta=delta_str)
+        col_w.metric(
+            label, f"{mean_val:.0f}", delta=delta_str,
+            delta_color="inverse" if metric == "resting_hr" else "normal",
+        )
         col_w.caption(f"Range: {min_val:.0f} – {max_val:.0f}")
     else:
         col_w.metric(label, "—")
@@ -134,18 +137,27 @@ if mean_col in summary.columns:
             else:
                 colors.append("#6B7280")  # within noise — neutral gray
 
+    text_vals = summary[mean_col].round(0).astype(int)
+
     fig = go.Figure(data=go.Bar(
         x=summary["month"],
         y=summary[mean_col],
         marker_color=colors,
-        text=summary[mean_col].round(1),
+        text=text_vals,
         textposition="outside",
+        textfont=dict(size=11),
     ))
+
+    # Add headroom above tallest bar so text labels don't get clipped
+    y_max = summary[mean_col].max()
+    y_min = summary[mean_col].min()
+    padding = (y_max - y_min) * 0.15 if y_max != y_min else y_max * 0.1
     fig.update_layout(
         template="plotly_dark",
-        height=350,
-        margin=dict(l=20, r=20, t=30, b=20),
+        height=380,
+        margin=dict(l=20, r=20, t=40, b=20),
         yaxis_title=FRIENDLY.get(metric_to_chart, metric_to_chart),
+        yaxis_range=[max(0, y_min - padding), y_max + padding],
         xaxis_title="Month",
     )
     st.plotly_chart(fig, use_container_width=True)

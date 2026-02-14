@@ -131,7 +131,7 @@ def enrich_sleep_periods(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     for col in ["bedtime_start", "bedtime_end"]:
         if col in sp.columns:
-            sp[col] = pd.to_datetime(sp[col], utc=True, errors="coerce")
+            sp[col] = pd.to_datetime(sp[col], errors="coerce")
 
     if "bedtime_start" in sp.columns:
         sp["bedtime_hour"] = (
@@ -148,7 +148,10 @@ def enrich_sleep_periods(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         )
 
     if "bedtime_hour_adj" in sp.columns and "waketime_hour" in sp.columns:
-        sp["sleep_midpoint"] = (sp["bedtime_hour_adj"] + sp["waketime_hour"]) / 2
+        # Put wake time on the same continuous scale as bedtime (e.g. 7 AM → 31)
+        # so the midpoint calculation is correct across midnight
+        waketime_adj = sp["waketime_hour"].apply(lambda h: h + 24 if h < 12 else h)
+        sp["sleep_midpoint"] = (sp["bedtime_hour_adj"] + waketime_adj) / 2
         # Normalize back to 0-24
         sp["sleep_midpoint"] = sp["sleep_midpoint"] % 24
 
