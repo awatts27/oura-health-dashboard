@@ -17,6 +17,7 @@ if daily is None or daily.empty:
 METRIC_OPTIONS = {
     "Sleep Score": "sleep_score",
     "Readiness Score": "readiness_score",
+    "HRV": "average_hrv",
     "Activity Score": "activity_score",
     "Resting HR": "resting_hr",
     "Steps": "steps",

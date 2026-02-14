@@ -14,6 +14,7 @@ from oura_api import fetch_all_data
 from data_processing import (
     build_daily_df,
     daily_hr_stats,
+    daily_hrv,
     enrich_sleep_periods,
     health_trend_grade,
     compute_trend,
@@ -43,6 +44,10 @@ hr_stats = daily_hr_stats(data)
 if not hr_stats.empty and not daily.empty:
     daily = daily.merge(hr_stats, on="day", how="left")
 
+hrv_df = daily_hrv(data)
+if not hrv_df.empty and not daily.empty:
+    daily = daily.merge(hrv_df, on="day", how="left")
+
 sp = enrich_sleep_periods(data)
 
 # Store in session state so pages can access without re-fetching
@@ -60,7 +65,7 @@ if daily.empty:
     st.stop()
 
 # KPI row — compare latest value against 7-day rolling average
-cols = st.columns(5)
+cols = st.columns(6)
 
 
 def _latest(col: str):
@@ -91,6 +96,7 @@ def _trend_icon(col: str) -> str:
 metrics = [
     ("Sleep Score", "sleep_score"),
     ("Readiness Score", "readiness_score"),
+    ("HRV (ms)", "average_hrv"),
     ("Activity Score", "activity_score"),
     ("Resting HR", "resting_hr"),
     ("Steps", "steps"),
@@ -123,7 +129,7 @@ st.markdown("---")
 
 st.subheader("Last 7 Days")
 recent = daily.tail(7)
-display_cols = [c for c in ["day", "sleep_score", "readiness_score", "activity_score", "steps", "resting_hr"] if c in recent.columns]
+display_cols = [c for c in ["day", "sleep_score", "readiness_score", "average_hrv", "activity_score", "steps", "resting_hr"] if c in recent.columns]
 if display_cols:
     show = recent[display_cols].copy()
     if "day" in show.columns:
@@ -156,9 +162,21 @@ if display_cols:
             return "color: #EF4444"
         return ""
 
+    def _color_hrv(val):
+        """Higher HRV is better."""
+        if not isinstance(val, (int, float)) or pd.isna(val):
+            return ""
+        if val >= 50:
+            return "color: #10B981"
+        elif val <= 20:
+            return "color: #EF4444"
+        return ""
+
     styled = show.style
     if score_cols_present:
         styled = styled.map(_color_scores, subset=score_cols_present)
+    if "average_hrv" in show.columns:
+        styled = styled.map(_color_hrv, subset=["average_hrv"])
     if "resting_hr" in show.columns:
         styled = styled.map(_color_hr, subset=["resting_hr"])
 
